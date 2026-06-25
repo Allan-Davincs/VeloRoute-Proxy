@@ -37,12 +37,18 @@ func (w *WeightedRoundRobin) Next(_ string) (*Backend, error) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
-	if len(w.slots) == 0 {
+	var alive []*Backend
+	for _, b := range w.slots {
+		if b.Alive() {
+			alive = append(alive, b)
+		}
+	}
+	if len(alive) == 0 {
 		return nil, fmt.Errorf("no alive backends available")
 	}
 
 	idx := atomic.AddUint64(&w.counter, 1) - 1
-	return w.slots[idx%uint64(len(w.slots))], nil
+	return alive[idx%uint64(len(alive))], nil
 }
 
 // AddBackend adds a backend and rebuilds weight slots.
