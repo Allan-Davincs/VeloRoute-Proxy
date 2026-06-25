@@ -1,0 +1,58 @@
+services:
+  veloroute:
+    build: ./backend
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+      - "9091:9091"
+    volumes:
+      - ./backend/config.docker.yaml:/app/config.yaml
+    depends_on:
+      - backend1
+      - backend2
+      - backend3
+    networks:
+      - veloroute-net
+
+  backend1:
+    image: hashicorp/http-echo
+    command: ["-text=Hello from Backend 1", "-listen=:8001"]
+    networks:
+      - veloroute-net
+
+  backend2:
+    image: hashicorp/http-echo
+    command: ["-text=Hello from Backend 2", "-listen=:8001"]
+    networks:
+      - veloroute-net
+
+  backend3:
+    image: hashicorp/http-echo
+    command: ["-text=Hello from Backend 3", "-listen=:8001"]
+    networks:
+      - veloroute-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9092:9090"
+    networks:
+      - veloroute-net
+
+  dashboard:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:9090
+    ports:
+      - "3000:3000"
+    depends_on:
+      - veloroute
+    networks:
+      - veloroute-net
+
+networks:
+  veloroute-net:
+    driver: bridge

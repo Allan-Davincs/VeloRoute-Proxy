@@ -1,0 +1,29 @@
+veloroute:
+  listen_addr: ":8080"
+  admin_addr: ":9090"
+  metrics_addr: ":9091"
+
+  load_balancing:
+    algorithm: "round_robin"
+
+  health_check:
+    enabled: true
+    interval_seconds: 5
+    timeout_seconds: 2
+    path: "/"
+
+  rate_limit:
+    enabled: true
+    requests_per_second: 10
+    burst: 20
+
+  backends:
+    - url: "http://backend1:8001"
+      weight: 1
+      name: "backend-1"
+    - url: "http://backend2:8001"
+      weight: 1
+      name: "backend-2"
+    - url: "http://backend3:8001"
+      weight: 2
+      name: "backend-3"

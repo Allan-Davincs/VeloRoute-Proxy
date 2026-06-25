@@ -1,0 +1,7 @@
+node_modules/
+dist/
+bin/
+*.exe
+.env
+.env.local
+.DS_Store
