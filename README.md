@@ -1,3 +1,11 @@
+<p align="center">
+  <img
+    src="https://res.cloudinary.com/ddlegxejs/image/upload/v1782450980/VeloRoute-logo_ywb2qe.png"
+    alt="VeloRoute logo"
+    width="220"
+  />
+</p>
+
 # VeloRoute
 
 A high-performance reverse proxy and load balancer built in Go, with a real-time React dashboard for operators who want visibility without the complexity of a full service mesh.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Activity } from 'lucide-react'
 import { getConfig } from '../../lib/api'
+import { VELO_ROUTE_LOGO_URL } from '../../lib/brand'
 import { useMetrics } from '../../hooks/useMetrics'
 import { useLogStream } from '../../hooks/useLogStream'
 import type { Algorithm } from '../../types'
@@ -34,8 +34,11 @@ export default function Dashboard() {
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Activity className="w-6 h-6 text-primary" />
-            <h1 className="text-xl font-bold">VeloRoute</h1>
+            <img
+              src={VELO_ROUTE_LOGO_URL}
+              alt="VeloRoute"
+              className="h-8 w-auto"
+            />
             <span className="flex items-center gap-1.5 text-xs text-success">
               <span className="w-2 h-2 rounded-full bg-success animate-pulse-dot" />
               Online
