@@ -41,5 +41,16 @@ export function useMetrics() {
     }
   }, [])
 
-  return { data, loading, error }
+  async function refresh() {
+    try {
+      const snapshot = await getMetrics()
+      dataRef.current = snapshot
+      setData(snapshot)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch metrics')
+    }
+  }
+
+  return { data, loading, error, refresh }
 }

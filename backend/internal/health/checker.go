@@ -17,14 +17,14 @@ type Checker struct {
 	timeout  time.Duration
 	path     string
 	client   *http.Client
-	balancer balancer.Balancer
+	pool     *balancer.Pool
 	logger   *slog.Logger
 	stopCh   chan struct{}
 	wg       sync.WaitGroup
 }
 
 // NewChecker creates a new health checker.
-func NewChecker(enabled bool, intervalSec, timeoutSec int, path string, b balancer.Balancer, logger *slog.Logger) *Checker {
+func NewChecker(enabled bool, intervalSec, timeoutSec int, path string, pool *balancer.Pool, logger *slog.Logger) *Checker {
 	return &Checker{
 		enabled:  enabled,
 		interval: time.Duration(intervalSec) * time.Second,
@@ -33,22 +33,22 @@ func NewChecker(enabled bool, intervalSec, timeoutSec int, path string, b balanc
 		client: &http.Client{
 			Timeout: time.Duration(timeoutSec) * time.Second,
 		},
-		balancer: b,
-		logger:   logger,
-		stopCh:   make(chan struct{}),
+		pool:   pool,
+		logger: logger,
+		stopCh: make(chan struct{}),
 	}
 }
 
 // Start begins health checking for all backends.
 func (c *Checker) Start() {
 	if !c.enabled {
-		for _, b := range c.balancer.GetBackends() {
-			c.balancer.MarkAlive(b.URL, true)
+		for _, b := range c.pool.GetBackends() {
+			c.pool.MarkAlive(b.URL, true)
 		}
 		return
 	}
 
-	for _, b := range c.balancer.GetBackends() {
+	for _, b := range c.pool.GetBackends() {
 		c.wg.Add(1)
 		go c.checkLoop(b)
 	}
@@ -94,7 +94,7 @@ func (c *Checker) check(b *balancer.Backend) {
 
 func (c *Checker) transition(b *balancer.Backend, alive bool) {
 	wasAlive := b.Alive()
-	c.balancer.MarkAlive(b.URL, alive)
+	c.pool.MarkAlive(b.URL, alive)
 
 	if wasAlive && !alive {
 		c.logger.Warn("Backend is DOWN", "backend", b.Name, "url", b.URL)

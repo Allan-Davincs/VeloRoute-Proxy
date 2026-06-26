@@ -22,26 +22,23 @@ import (
 // Server provides the admin REST API and SSE log stream.
 type Server struct {
 	cfg         *config.Config
-	balancer    balancer.Balancer
+	pool        *balancer.Pool
 	metrics     *metrics.Registry
 	accessLog   *logger.AccessLogger
 	logger      *slog.Logger
-	algorithm   string
 	mu          sync.RWMutex
-	totalReqs   int64
 	lastReqTime time.Time
 	reqCount    int64
 }
 
 // NewServer creates a new admin API server.
-func NewServer(cfg *config.Config, b balancer.Balancer, m *metrics.Registry, log *logger.AccessLogger, logger *slog.Logger, algorithm string) *Server {
+func NewServer(cfg *config.Config, pool *balancer.Pool, m *metrics.Registry, log *logger.AccessLogger, logger *slog.Logger) *Server {
 	return &Server{
 		cfg:       cfg,
-		balancer:  b,
+		pool:      pool,
 		metrics:   m,
 		accessLog: log,
 		logger:    logger,
-		algorithm: algorithm,
 	}
 }
 
@@ -103,7 +100,7 @@ func (s *Server) handleBackendByURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodDelete {
-		s.balancer.RemoveBackend(backendURL)
+		s.pool.RemoveBackend(backendURL)
 		s.writeJSON(w, map[string]string{"status": "removed"})
 		return
 	}
@@ -130,7 +127,7 @@ func (s *Server) addBackend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	b := &balancer.Backend{URL: req.URL, Name: req.Name, Weight: req.Weight}
-	s.balancer.AddBackend(b)
+	s.pool.AddBackend(b)
 	s.writeJSON(w, map[string]string{"status": "added"})
 }
 
@@ -142,9 +139,10 @@ func (s *Server) updateWeight(w http.ResponseWriter, r *http.Request, backendURL
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	for _, b := range s.balancer.GetBackends() {
+	for _, b := range s.pool.GetBackends() {
 		if b.URL == backendURL {
 			b.Weight = req.Weight
+			s.pool.MarkAlive(b.URL, b.Alive())
 			s.writeJSON(w, map[string]string{"status": "updated"})
 			return
 		}
@@ -157,14 +155,11 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	s.mu.RLock()
-	algo := s.algorithm
-	s.mu.RUnlock()
 	s.writeJSON(w, map[string]interface{}{
 		"listen_addr":  s.cfg.VeloRoute.ListenAddr,
 		"admin_addr":   s.cfg.VeloRoute.AdminAddr,
 		"metrics_addr": s.cfg.VeloRoute.MetricsAddr,
-		"algorithm":    algo,
+		"algorithm":    s.pool.Algorithm(),
 		"rate_limit":   s.cfg.VeloRoute.RateLimit,
 		"health_check": s.cfg.VeloRoute.HealthCheck,
 	})
@@ -182,9 +177,11 @@ func (s *Server) handleAlgorithm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	s.mu.Lock()
-	s.algorithm = req.Algorithm
-	s.mu.Unlock()
+	if err := s.pool.SetAlgorithm(req.Algorithm); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.logger.Info("algorithm changed", "algorithm", req.Algorithm)
 	s.writeJSON(w, map[string]string{"algorithm": req.Algorithm})
 }
 
@@ -197,7 +194,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) metricsSnapshot() map[string]interface{} {
-	backends := s.balancer.GetBackends()
+	backends := s.pool.GetBackends()
 	var totalReqs int64
 	var totalErrors int64
 	var activeConns int64
@@ -267,7 +264,7 @@ func (s *Server) requestsPerSecond(totalReqs int64) float64 {
 }
 
 func (s *Server) backendList() []map[string]interface{} {
-	backends := s.balancer.GetBackends()
+	backends := s.pool.GetBackends()
 	result := make([]map[string]interface{}, 0, len(backends))
 	for _, b := range backends {
 		lastCheck := ""
@@ -330,16 +327,7 @@ func (s *Server) writeJSON(w http.ResponseWriter, v interface{}) {
 
 // Algorithm returns the current load balancing algorithm.
 func (s *Server) Algorithm() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.algorithm
-}
-
-// SetAlgorithm updates the current algorithm name.
-func (s *Server) SetAlgorithm(algo string) {
-	s.mu.Lock()
-	s.algorithm = algo
-	s.mu.Unlock()
+	return s.pool.Algorithm()
 }
 
 // DrainBody reads and closes a request body.

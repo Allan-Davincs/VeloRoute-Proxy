@@ -41,14 +41,14 @@ func main() {
 		cfg.VeloRoute.RateLimit.Burst,
 	)
 
-	bal, err := balancer.New(cfg.VeloRoute.LoadBalancing.Algorithm)
+	pool, err := balancer.NewPool(cfg.VeloRoute.LoadBalancing.Algorithm)
 	if err != nil {
-		appLogger.Error("failed to create balancer", "error", err)
+		appLogger.Error("failed to create balancer pool", "error", err)
 		os.Exit(1)
 	}
 
 	for _, bc := range cfg.VeloRoute.Backends {
-		bal.AddBackend(&balancer.Backend{
+		pool.AddBackend(&balancer.Backend{
 			URL:    bc.URL,
 			Name:   bc.Name,
 			Weight: bc.Weight,
@@ -62,13 +62,13 @@ func main() {
 		cfg.VeloRoute.HealthCheck.IntervalSeconds,
 		cfg.VeloRoute.HealthCheck.TimeoutSeconds,
 		cfg.VeloRoute.HealthCheck.Path,
-		bal,
+		pool,
 		appLogger,
 	)
 	healthChecker.Start()
 
-	adminServer := admin.NewServer(cfg, bal, metricsReg, accessLog, appLogger, cfg.VeloRoute.LoadBalancing.Algorithm)
-	proxyHandler := proxy.NewHandler(bal, rl, metricsReg, accessLog, cfg.VeloRoute.LoadBalancing.Algorithm)
+	adminServer := admin.NewServer(cfg, pool, metricsReg, accessLog, appLogger)
+	proxyHandler := proxy.NewHandler(pool, rl, metricsReg, accessLog)
 
 	proxySrv := &http.Server{Addr: cfg.VeloRoute.ListenAddr, Handler: proxyHandler}
 	adminSrv := &http.Server{Addr: cfg.VeloRoute.AdminAddr, Handler: adminServer.Handler()}

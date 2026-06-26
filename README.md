@@ -1,96 +1,60 @@
 # VeloRoute
 
-**High-performance reverse proxy and load balancer** with a real-time monitoring dashboard.
+A high-performance reverse proxy and load balancer built in Go, with a real-time React dashboard for operators who want visibility without the complexity of a full service mesh.
 
-VeloRoute sits between clients and your backend servers. It distributes HTTP traffic using pluggable load balancing algorithms, monitors backend health, enforces per-IP rate limiting, and exposes Prometheus metrics plus a live React dashboard.
+VeloRoute sits between your users and your backend servers. It distributes traffic, watches backend health, rate-limits noisy clients, and gives you live metrics — all from a single lightweight binary.
 
----
-
-## Table of Contents
-
-- [The Idea](#the-idea)
-- [What Has Been Built](#what-has-been-built)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [Configuration](#configuration)
-- [Load Balancing Algorithms](#load-balancing-algorithms)
-- [Admin API Reference](#admin-api-reference)
-- [Prometheus Metrics](#prometheus-metrics)
-- [Dashboard Guide](#dashboard-guide)
-- [Development](#development)
-- [Docker Deployment](#docker-deployment)
-- [Roadmap](#roadmap)
+**Author:** [Allan Davincs](https://github.com/Allan-Davincs)  
+**Repository:** [github.com/Allan-Davincs/VeloRoute-Proxy](https://github.com/Allan-Davincs/VeloRoute-Proxy)
 
 ---
 
-## The Idea
+## Screenshots
 
-Modern applications need more than a simple reverse proxy. They need:
+### Admin dashboard
 
-1. **Intelligent traffic distribution** — route requests across multiple backend instances
-2. **Automatic failover** — detect and remove unhealthy backends without manual intervention
-3. **Protection** — rate limit abusive clients before they reach your servers
-4. **Observability** — metrics, structured logs, and a real-time dashboard for operators
+Live metrics, latency charts, backend management, and a scrolling access log feed.
 
-VeloRoute was designed to solve all four problems in a single, lightweight Go binary with an optional React dashboard. It uses only the Go standard library for HTTP (no framework overhead), stores all state in memory (no database dependency), and streams access logs to the dashboard via Server-Sent Events (SSE).
+![VeloRoute admin dashboard](docs/screenshots/Admin-Screenshot.png)
 
-### Design Principles
+![VeloRoute dashboard — backend view](docs/screenshots/Admin-ScrenShot-2.png)
 
-- **Single binary deployment** — compile once, run anywhere
-- **Stdlib-first** — `net/http` + `httputil.ReverseProxy`, no external web framework
-- **Thread-safe by default** — `sync.Mutex`, `sync.RWMutex`, and `sync/atomic` for all shared state
-- **Graceful shutdown** — drain in-flight requests on SIGTERM/SIGINT (30s timeout)
-- **SSE over WebSockets** — simpler, HTTP/1.1 compatible log streaming
+### API health check
+
+Admin API responding with backend status and metrics.
+
+![VeloRoute API check](docs/screenshots/Api-check-1.png)
 
 ---
 
-## What Has Been Built
+## Why VeloRoute?
 
-### Backend (Go)
+If you run more than one backend instance, you need something in front of them that can:
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| Config loader | Done | YAML configuration with validation |
-| Round Robin balancer | Done | Even distribution across alive backends |
-| Weighted Round Robin | Done | Proportional distribution by weight |
-| Least Connections | Done | Routes to backend with fewest active connections |
-| IP Hash | Done | Sticky sessions via FNV-1a hash |
-| Rate limiter | Done | Token bucket per client IP with stale cleanup |
-| Health checker | Done | Background goroutines with configurable interval/timeout |
-| Reverse proxy | Done | `httputil.ReverseProxy` with forwarded headers |
-| Access logger | Done | Structured JSON logs via `slog` |
-| Prometheus metrics | Done | Counters, histograms, gauges, summaries on `:9091` |
-| Admin REST API | Done | Runtime backend management + metrics snapshot |
-| SSE log stream | Done | Real-time access log feed for dashboard |
-| Graceful shutdown | Done | 30-second drain on signal |
+- **Spread traffic fairly** — round robin, weighted, least connections, or sticky IP hash
+- **Drop dead servers automatically** — active health checks every few seconds
+- **Protect your stack** — per-IP token bucket rate limiting
+- **Show you what's happening** — Prometheus metrics plus a live dashboard
 
-### Frontend (React)
+VeloRoute does all of that without Redis, without a database, and without pulling in a heavy web framework. One Go binary, one YAML config file, optional React dashboard.
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| Metrics cards | Done | Total requests, req/sec, error rate, P95 latency |
-| Requests chart | Done | 60-second rolling line chart (Recharts) |
-| Latency chart | Done | P50/P95/P99 percentile lines |
-| Backend table | Done | Live status with expandable request bars |
-| Access log feed | Done | SSE stream with auto-scroll and badges |
-| Error boundary | Done | Catches render errors gracefully |
-| Design system | Done | Dark DevOps theme per UI/UX Pro Max guidelines |
+---
 
-### Infrastructure
+## What's included
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| Docker Compose | Done | Full stack with 3 echo backends + Prometheus |
-| Makefile | Done | `dev`, `test`, `build`, `lint`, `run-*` targets |
-| Prometheus config | Done | Scrapes VeloRoute metrics endpoint |
+| Layer | What you get |
+|-------|----------------|
+| **Proxy** | `net/http` reverse proxy on `:8080` |
+| **Load balancing** | 4 algorithms, hot-swappable at runtime |
+| **Health checks** | Background goroutines with configurable interval |
+| **Rate limiting** | Token bucket per client IP |
+| **Metrics** | Prometheus scrape endpoint on `:9091` |
+| **Admin API** | REST + SSE log stream on `:9090` |
+| **Dashboard** | React UI with algorithm switcher and backend management |
 
 ---
 
 ## Architecture
-
-### System Overview
 
 ```
                     ┌─────────────────────────────────────────┐
@@ -100,418 +64,215 @@ VeloRoute was designed to solve all four problems in a single, lightweight Go bi
                                          ▼
                               ┌──────────────────┐
                               │  Proxy :8080     │
-                              │  (proxy.go)      │
                               └────────┬─────────┘
                     ┌──────────────────┼──────────────────┐
                     ▼                  ▼                  ▼
             ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-            │ Rate Limiter│   │  Balancer   │   │Access Logger│
-            │ (429 if hit)│   │ (4 algos)   │   │ (slog JSON) │
+            │ Rate Limiter│   │ BalancerPool│   │Access Logger│
             └─────────────┘   └──────┬──────┘   └──────┬──────┘
                                      │                  │
                                      ▼                  ▼
                             ┌──────────────┐    ┌──────────────┐
                             │ Backend Pool │    │ SSE Channel  │
-                            │ (health chk) │    │ /api/logs/   │
                             └──────────────┘    └──────┬───────┘
                                                          │
     ┌────────────────────────────────────────────────────┼────────────┐
-    │                                                    │            │
     ▼                                                    ▼            ▼
 ┌─────────────┐                                  ┌─────────────┐  ┌──────────┐
-│ Admin API   │◄── poll /api/metrics ────────────│  Dashboard  │  │Prometheus│
+│ Admin API   │◄── dashboard polls /api/metrics ─│  Dashboard  │  │Prometheus│
 │ :9090       │◄── SSE /api/logs/stream ─────────│  :3000      │  │ :9091    │
 └─────────────┘                                  └─────────────┘  └──────────┘
 ```
 
-### Request Lifecycle
+### Port map
 
-1. Client sends HTTP request to VeloRoute on port `8080`
-2. Rate limiter checks the client IP token bucket → `429` if exceeded
-3. Load balancer selects the next alive backend → `503` if none available
-4. Request is proxied via `httputil.ReverseProxy` with `X-Forwarded-For`, `X-Real-IP`, `X-VeloRoute-Backend` headers
-5. Response is returned to the client
-6. Access log entry is written (JSON to stdout) and broadcast to SSE subscribers
-7. Prometheus metrics are updated (counters, histograms)
-
-### Port Map
-
-| Port | Service | Purpose |
-|------|---------|---------|
-| `8080` | Proxy | Main reverse proxy — route client traffic here |
-| `9090` | Admin API | REST API + SSE log stream for dashboard |
-| `9091` | Metrics | Prometheus `/metrics` scrape endpoint |
-| `3000` | Dashboard | React monitoring UI |
-| `9092` | Prometheus | Prometheus UI (Docker only) |
+| Port | Service |
+|------|---------|
+| `8080` | Reverse proxy — point your traffic here |
+| `9090` | Admin REST API + SSE log stream |
+| `9091` | Prometheus `/metrics` |
+| `3000` | React dashboard |
 
 ---
 
-## Tech Stack
-
-| Layer | Technologies |
-|-------|-------------|
-| **Backend** | Go 1.22+, `net/http`, `httputil.ReverseProxy`, `log/slog`, Prometheus client, YAML config |
-| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS, Recharts, Lucide React |
-| **Ops** | Docker Compose, Makefile, Prometheus |
-| **Design** | UI/UX Pro Max design system — Real-Time Monitoring / Data-Dense Dashboard pattern |
-
----
-
-## Project Structure
-
-```
-VeloRoute-Proxy/
-├── backend/                        # Go reverse proxy core
-│   ├── cmd/veloroute/main.go       # Entry point — wires all services
-│   ├── internal/
-│   │   ├── proxy/proxy.go          # Core reverse proxy handler
-│   │   ├── balancer/               # Load balancing (4 algorithms + tests)
-│   │   ├── health/checker.go       # Active health check goroutines
-│   │   ├── ratelimit/limiter.go    # Token bucket per IP
-│   │   ├── metrics/prometheus.go   # Prometheus metrics registry
-│   │   ├── logger/access.go        # Structured JSON access logs + SSE pub/sub
-│   │   ├── admin/api.go            # REST admin API + SSE endpoint
-│   │   └── config/                 # YAML config loader
-│   ├── config.yaml                 # Local development config
-│   ├── config.docker.yaml          # Docker Compose config
-│   ├── Dockerfile
-│   └── go.mod
-│
-├── frontend/                       # React TypeScript dashboard
-│   ├── src/
-│   │   ├── app/                    # App entry + error boundary
-│   │   ├── components/Dashboard/   # Dashboard, charts, table, log feed
-│   │   ├── hooks/                  # useMetrics, useBackends, useLogStream
-│   │   ├── lib/api.ts              # API client (native fetch)
-│   │   └── types/index.ts          # Shared TypeScript types
-│   ├── Dockerfile
-│   └── package.json
-│
-├── design-system/                  # UI/UX Pro Max design tokens
-│   ├── MASTER.md                   # Global design system
-│   └── pages/dashboard.md          # Dashboard-specific overrides
-│
-├── docker-compose.yml              # Full stack local development
-├── prometheus.yml                  # Prometheus scrape config
-├── Makefile                        # dev, test, build, lint
-└── README.md
-```
-
----
-
-## Getting Started
+## Quick start
 
 ### Prerequisites
 
-- **Go 1.22+** — for building/running the backend
-- **Node.js 18+** — for the frontend dashboard
-- **Docker & Docker Compose** — for full-stack deployment (optional)
+- Go 1.22+
+- Node.js 18+
+- Docker (optional, for `make dev`)
 
-### Quick Start (Docker)
+### Docker (easiest)
 
 ```bash
-git clone git@github.com:Allan-Davincs/VeloRoute-Proxy.git
+git clone https://github.com/Allan-Davincs/VeloRoute-Proxy.git
 cd VeloRoute-Proxy
 make dev
 ```
-
-This starts VeloRoute, 3 test backends, Prometheus, and the dashboard.
 
 | URL | What |
 |-----|------|
 | http://localhost:8080 | Proxied traffic |
 | http://localhost:9090/api/metrics | Metrics JSON |
 | http://localhost:3000 | Dashboard |
-| http://localhost:9092 | Prometheus UI |
 
-Test the proxy:
+### Local development
 
-```bash
-curl http://localhost:8080
-# Rotates between "Hello from Backend 1/2/3"
-```
-
-### Local Development (without Docker)
-
-**Terminal 1 — Start test backends** (or use any HTTP servers on ports 8001-8003):
+**Terminal 1 — test backends:**
 
 ```bash
-# Example with Python
 python3 -m http.server 8001 &
 python3 -m http.server 8002 &
 python3 -m http.server 8003 &
 ```
 
-**Terminal 2 — Start VeloRoute:**
+**Terminal 2 — VeloRoute:**
 
 ```bash
 make run-backend
 ```
 
-**Terminal 3 — Start dashboard:**
+**Terminal 3 — dashboard:**
 
 ```bash
-cd frontend && npm install && npm run dev
+make run-frontend
 ```
 
-Open http://localhost:3000 and generate traffic:
+Generate some traffic:
 
 ```bash
 for i in $(seq 1 20); do curl -s http://localhost:8080 > /dev/null; done
 ```
 
-### Build
+---
 
-```bash
-make build
-# Backend binary: backend/bin/veloroute
-# Frontend static files: frontend/dist/
-```
+## Dashboard features
+
+The dashboard lets you **change the load balancing algorithm** from a dropdown in the header — no restart required. The selection calls `PUT /api/config/algorithm`, which hot-swaps the active balancer while keeping backend state intact.
+
+You can also **add and remove backends** directly from the UI. Fill in name, URL, and weight, then hit Add. Each row has a Remove button that calls the admin API.
 
 ---
 
 ## Configuration
 
-Configuration is loaded from a YAML file (default: `./config.yaml`).
+See [`backend/config.yaml`](backend/config.yaml) for the full schema. Key fields:
 
 ```yaml
 veloroute:
-  listen_addr: ":8080"          # Proxy listen address
-  admin_addr: ":9090"           # Admin API listen address
-  metrics_addr: ":9091"         # Prometheus metrics address
-
+  listen_addr: ":8080"
+  admin_addr: ":9090"
+  metrics_addr: ":9091"
   load_balancing:
-    algorithm: "round_robin"    # round_robin | weighted_round_robin | least_connections | ip_hash
-
-  health_check:
-    enabled: true
-    interval_seconds: 5         # Check interval
-    timeout_seconds: 2          # Per-check timeout
-    path: "/"                   # Health check endpoint on each backend
-
+    algorithm: "round_robin"   # round_robin | weighted_round_robin | least_connections | ip_hash
   rate_limit:
     enabled: true
-    requests_per_second: 10     # Sustained rate per IP
-    burst: 20                   # Burst allowance per IP
-
+    requests_per_second: 10
+    burst: 20
   backends:
     - url: "http://localhost:8001"
       weight: 1
       name: "backend-1"
-    - url: "http://localhost:8002"
-      weight: 1
-      name: "backend-2"
-    - url: "http://localhost:8003"
-      weight: 2
-      name: "backend-3"
 ```
 
-### Environment Variables (Frontend)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VITE_API_BASE_URL` | `http://localhost:9090` | Admin API base URL for dashboard |
-
-### Runtime Configuration
-
-The admin API allows changing backends and algorithms without restarting:
+Switch algorithm at runtime:
 
 ```bash
-# Switch algorithm
 curl -X PUT http://localhost:9090/api/config/algorithm \
   -H "Content-Type: application/json" \
   -d '{"algorithm": "least_connections"}'
-
-# Add a backend
-curl -X POST http://localhost:9090/api/backends \
-  -H "Content-Type: application/json" \
-  -d '{"url": "http://localhost:8004", "name": "backend-4", "weight": 1}'
 ```
 
 ---
 
-## Load Balancing Algorithms
-
-| Algorithm | Key | When to Use |
-|-----------|-----|-------------|
-| **Round Robin** | `round_robin` | Default. Even distribution when all backends are equal |
-| **Weighted Round Robin** | `weighted_round_robin` | Backends have different capacities (higher weight = more traffic) |
-| **Least Connections** | `least_connections` | Long-lived connections or variable request durations |
-| **IP Hash** | `ip_hash` | Sticky sessions — same client IP always hits the same backend |
-
-All algorithms skip backends marked as dead by the health checker.
-
----
-
-## Admin API Reference
-
-Base URL: `http://localhost:9090`
-
-### Endpoints
+## Admin API
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/backends` | List all backends with status |
-| `POST` | `/api/backends` | Add a backend at runtime |
-| `DELETE` | `/api/backends/:url` | Remove a backend (URL base64-encoded) |
-| `PUT` | `/api/backends/:url/weight` | Update backend weight |
-| `GET` | `/api/config` | Current running configuration |
-| `PUT` | `/api/config/algorithm` | Switch load balancing algorithm |
-| `GET` | `/api/metrics` | JSON metrics snapshot for dashboard |
-| `GET` | `/api/logs/stream` | SSE stream of access log entries |
-
-### `GET /api/metrics` Response
-
-```json
-{
-  "total_requests": 142983,
-  "requests_per_second": 234.5,
-  "error_rate_percent": 0.12,
-  "active_connections": 47,
-  "p50_latency_ms": 12.3,
-  "p95_latency_ms": 89.1,
-  "p99_latency_ms": 234.5,
-  "uptime_seconds": 86400,
-  "backends": [
-    {
-      "name": "backend-1",
-      "url": "http://localhost:8001",
-      "alive": true,
-      "weight": 1,
-      "active_connections": 12,
-      "total_requests": 47000,
-      "total_errors": 3,
-      "last_health_check": "2024-01-15T10:30:00Z"
-    }
-  ]
-}
-```
-
-### SSE Log Stream
-
-```
-GET /api/logs/stream
-Content-Type: text/event-stream
-
-data: {"time":"...","client_ip":"192.168.1.1","method":"GET","path":"/","status":200,"duration_ms":12.3,"backend":"backend-1",...}
-```
-
----
-
-## Prometheus Metrics
-
-Scrape endpoint: `http://localhost:9091/metrics`
-
-| Metric | Type | Labels |
-|--------|------|--------|
-| `veloroute_requests_total` | Counter | backend, method, status_code |
-| `veloroute_errors_total` | Counter | backend, error_type |
-| `veloroute_request_duration_seconds` | Histogram | backend, method |
-| `veloroute_active_connections` | Gauge | backend |
-| `veloroute_backend_alive` | Gauge | backend, name |
-| `veloroute_request_duration_summary` | Summary | backend |
-
----
-
-## Dashboard Guide
-
-The React dashboard provides real-time visibility into VeloRoute operations.
-
-### Layout
-
-```
-┌─────────────────────────────────────────────────────┐
-│  VeloRoute        Algorithm: Round Robin    Online  │  Header
-├──────────┬──────────┬──────────┬───────────────────┤
-│  Total   │ Req/sec  │ Error %  │  P95 Latency      │  Metrics Cards
-├──────────┴──────────┴──────────┴───────────────────┤
-│  [Requests/sec — Line Chart (last 60s)]              │
-├────────────────────────┬────────────────────────────┤
-│ P50/P95/P99 Latency    │  Backend Servers Table      │
-├────────────────────────┴────────────────────────────┤
-│  Live Access Log Feed (SSE, auto-scroll)             │
-└─────────────────────────────────────────────────────┘
-```
-
-### Components
-
-- **MetricsCards** — Polls `/api/metrics` every 2s. Color-coded thresholds for error rate and latency.
-- **RequestsChart** — 60-point rolling window of requests per second.
-- **LatencyChart** — P50 (green), P95 (amber), P99 (red) latency lines.
-- **BackendTable** — Click a row to expand a mini request distribution bar. Alive backends show a pulsing green dot.
-- **AccessLogFeed** — SSE connection with method/status badges, monospace font, fade-in animation.
-
-### Design System
-
-The dashboard follows the **Real-Time Monitoring** pattern from the [UI/UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) design skill:
-
-- Dark theme optimized for operations (`#0f1117` background)
-- Indigo primary accent (`#6366f1`)
-- Skeleton loaders on initial load (no spinners)
-- Lucide React icons throughout
-- `prefers-reduced-motion` respected
-
-Design tokens are documented in `design-system/MASTER.md` and `design-system/pages/dashboard.md`.
+| `GET` | `/api/backends` | List backends |
+| `POST` | `/api/backends` | Add backend |
+| `DELETE` | `/api/backends/:url` | Remove backend (base64 URL) |
+| `PUT` | `/api/config/algorithm` | Hot-swap load balancing algorithm |
+| `GET` | `/api/metrics` | JSON metrics snapshot |
+| `GET` | `/api/logs/stream` | SSE access log stream |
 
 ---
 
 ## Development
 
-### Commands
-
 ```bash
-make dev            # Docker Compose full stack
-make test           # Go tests (-race) + frontend lint
-make build          # Compile backend binary + frontend bundle
-make lint           # go vet + ESLint
-make run-backend    # Run Go proxy locally
-make run-frontend   # Run Vite dev server
+make test      # go test -race + eslint
+make build     # compile binary + frontend bundle
+make lint      # go vet + eslint
 ```
-
-### Coding Conventions
-
-**Go:**
-- No external web framework — stdlib `net/http` only
-- All concurrent access via `sync.Mutex`, `sync.RWMutex`, or `sync/atomic`
-- Godoc comments on all exported functions
-- Table-driven tests for balancers and rate limiter
-- No global mutable state — dependencies passed via constructors
-
-**React:**
-- Strict TypeScript (no `any`)
-- Functional components + hooks only
-- API calls in custom hooks, not components
-- Tailwind CSS only (no inline styles)
-- SSE connections cleaned up on unmount
 
 ---
 
-## Docker Deployment
+## Project structure
 
-`docker-compose.yml` defines five services:
-
-| Service | Image/Build | Ports |
-|---------|-------------|-------|
-| `veloroute` | `./backend` | 8080, 9090, 9091 |
-| `backend1-3` | `hashicorp/http-echo` | internal |
-| `prometheus` | `prom/prometheus` | 9092 |
-| `dashboard` | `./frontend` | 3000 |
-
-Docker uses `backend/config.docker.yaml` with internal service hostnames (`backend1:8001`, etc.).
+```
+VeloRoute-Proxy/
+├── backend/                 # Go reverse proxy
+│   ├── cmd/veloroute/       # Entry point
+│   └── internal/
+│       ├── balancer/        # 4 algorithms + hot-swap Pool
+│       ├── proxy/           # Reverse proxy handler
+│       ├── admin/           # REST API + SSE
+│       ├── health/          # Health checker
+│       ├── ratelimit/       # Token bucket limiter
+│       └── metrics/         # Prometheus registry
+├── frontend/                # React dashboard
+├── docs/screenshots/        # README images
+├── docker-compose.yml
+└── Makefile
+```
 
 ---
 
 ## Roadmap
 
-- [ ] TLS termination
-- [ ] Admin API authentication
-- [ ] Config hot-reload from file watch
-- [ ] Weighted algorithm switch at runtime (rebuild balancer)
-- [ ] Request tracing with OpenTelemetry
-- [ ] WebSocket alternative for log streaming
+- TLS termination
+- Admin API authentication
+- Config file hot-reload
+- OpenTelemetry tracing
+- Kubernetes manifests
+
+---
+
+## Contact
+
+Built by **Allan Davincs**. Questions, feedback, or collaboration — reach out:
+
+| Channel | Link |
+|---------|------|
+| **GitHub** | [github.com/Allan-Davincs](https://github.com/Allan-Davincs) |
+| **WhatsApp** | [+255 759 637 644](https://wa.me/255759637644) |
+| **TikTok** | [@davincsTEch](https://www.tiktok.com/@davincsTEch) |
+
+---
+
+## Disclaimer and contributing notice
+
+This project is open source and shared for learning, experimentation, and legitimate infrastructure use.
+
+**Before you fork, contribute, or deploy VeloRoute in production, please read this:**
+
+1. **No warranty** — VeloRoute is provided as-is, without guarantee of uptime, security, or fitness for any particular purpose. You are responsible for how you use it.
+
+2. **Production hardening is on you** — The admin API (`:9090`) has no authentication by default. Do not expose it to the public internet without adding auth, TLS, and network restrictions.
+
+3. **Forking and contributions** — You are welcome to fork and contribute. If you do:
+   - Open a pull request with a clear description of your changes
+   - Do not remove author attribution or license notices
+   - For major changes, reach out first via WhatsApp (**0759637644**) or GitHub issues so we can align on direction
+
+4. **Misuse** — Do not use VeloRoute to bypass rate limits, attack third-party services, or distribute malware. The author is not liable for misuse of this software.
+
+5. **Support** — Community support is best-effort. For direct questions, contact **WhatsApp: 0759637644** or **TikTok: @davincsTEch**.
 
 ---
 
 ## License
 
-MIT
+MIT — see repository for details.

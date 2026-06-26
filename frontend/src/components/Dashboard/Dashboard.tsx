@@ -1,25 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Activity } from 'lucide-react'
 import { getConfig } from '../../lib/api'
 import { useMetrics } from '../../hooks/useMetrics'
 import { useLogStream } from '../../hooks/useLogStream'
+import type { Algorithm } from '../../types'
 import MetricsCards from './MetricsCards'
-import BackendTable from './BackendTable'
+import BackendManager from './BackendManager'
 import RequestsChart from './RequestsChart'
 import LatencyChart from './LatencyChart'
 import AccessLogFeed from './AccessLogFeed'
-
-function formatAlgorithm(algo: string): string {
-  return algo
-    .split('_')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
-}
+import AlgorithmSwitcher from './AlgorithmSwitcher'
 
 export default function Dashboard() {
-  const { data, loading, error } = useMetrics()
+  const { data, loading, error, refresh } = useMetrics()
   const { logs, connected } = useLogStream()
-  const [algorithm, setAlgorithm] = useState('round_robin')
+  const [algorithm, setAlgorithm] = useState<Algorithm>('round_robin')
 
   useEffect(() => {
     getConfig()
@@ -27,13 +22,17 @@ export default function Dashboard() {
       .catch(() => {})
   }, [])
 
+  const handleMutate = useCallback(() => {
+    refresh()
+  }, [refresh])
+
   const backends = data?.backends ?? []
   const aliveCount = backends.filter((b) => b.alive).length
 
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
             <Activity className="w-6 h-6 text-primary" />
             <h1 className="text-xl font-bold">VeloRoute</h1>
@@ -42,12 +41,9 @@ export default function Dashboard() {
               Online
             </span>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-text-muted">
-              Algorithm:{' '}
-              <span className="text-primary font-medium">{formatAlgorithm(algorithm)}</span>
-            </span>
-            <span className="text-sm text-text-muted">
+          <div className="flex items-center gap-6">
+            <AlgorithmSwitcher value={algorithm} onChange={setAlgorithm} />
+            <span className="text-sm text-text-muted whitespace-nowrap">
               {aliveCount}/{backends.length} backends alive
             </span>
           </div>
@@ -71,7 +67,7 @@ export default function Dashboard() {
             p95={data?.p95_latency_ms ?? 0}
             p99={data?.p99_latency_ms ?? 0}
           />
-          <BackendTable backends={backends} loading={loading} />
+          <BackendManager backends={backends} loading={loading} onMutate={handleMutate} />
         </div>
 
         <AccessLogFeed logs={logs} connected={connected} />

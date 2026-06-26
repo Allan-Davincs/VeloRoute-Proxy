@@ -39,21 +39,19 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 
 // Handler proxies HTTP requests to backend servers.
 type Handler struct {
-	balancer    balancer.Balancer
-	limiter     *ratelimit.Limiter
-	metrics     *metrics.Registry
-	accessLog   *logger.AccessLogger
-	leastConn   bool
+	pool      *balancer.Pool
+	limiter   *ratelimit.Limiter
+	metrics   *metrics.Registry
+	accessLog *logger.AccessLogger
 }
 
 // NewHandler creates a new reverse proxy handler.
-func NewHandler(b balancer.Balancer, limiter *ratelimit.Limiter, m *metrics.Registry, log *logger.AccessLogger, algorithm string) *Handler {
+func NewHandler(pool *balancer.Pool, limiter *ratelimit.Limiter, m *metrics.Registry, log *logger.AccessLogger) *Handler {
 	return &Handler{
-		balancer:  b,
+		pool:      pool,
 		limiter:   limiter,
 		metrics:   m,
 		accessLog: log,
-		leastConn: algorithm == "least_connections",
 	}
 }
 
@@ -69,14 +67,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	backend, err := h.balancer.Next(clientIP)
+	backend, err := h.pool.Balancer().Next(clientIP)
 	if err != nil {
 		h.metrics.RecordError("none", "no_backend")
 		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
 		return
 	}
 
-	if h.leastConn {
+	leastConn := h.pool.Algorithm() == "least_connections"
+	if leastConn {
 		atomic.AddInt64(&backend.ActiveConns, 1)
 		defer atomic.AddInt64(&backend.ActiveConns, -1)
 		h.metrics.SetActiveConnections(backend.Name, atomic.LoadInt64(&backend.ActiveConns))
