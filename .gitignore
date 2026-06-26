@@ -7,3 +7,4 @@ bin/
 .DS_Store
 .env
 /veloRouteProxyMasterPRompt.md
+./env.local2
