@@ -268,7 +268,6 @@ Built by **Allan Davincs**. Questions, feedback, or collaboration — reach out:
 |---------|------|
 | **GitHub** | [github.com/Allan-Davincs](https://github.com/Allan-Davincs) |
 | **WhatsApp** | [+255 759 637 644](https://wa.me/255759637644) |
-| **TikTok** | [@davincsTEch](https://www.tiktok.com/@davincsTEch) |
 
 ---
 
