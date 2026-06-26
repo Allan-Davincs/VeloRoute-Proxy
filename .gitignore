@@ -6,4 +6,4 @@ bin/
 .env.local
 .DS_Store
 .env
-./veloRoute-MasterPrompt.md
+/veloRouteProxyMasterPRompt.md
