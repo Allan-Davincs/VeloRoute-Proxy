@@ -1,0 +1,15 @@
+{
+  "name": "veloroute-backend",
+  "description": "VeloRoute reverse proxy and load balancer",
+  "repository": "https://github.com/Allan-Davincs/VeloRoute-Proxy",
+  "keywords": ["go", "proxy", "load-balancer"],
+  "buildpacks": [
+    { "url": "heroku/go" }
+  ],
+  "env": {
+    "VELOROUTE_CONFIG": {
+      "description": "Path to config file",
+      "value": "config.heroku.yaml"
+    }
+  }
+}

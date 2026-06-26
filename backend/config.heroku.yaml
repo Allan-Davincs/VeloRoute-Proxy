@@ -1,0 +1,30 @@
+veloroute:
+  listen_addr: ":8080"
+  admin_addr: ":9090"
+  metrics_addr: ":9091"
+
+  load_balancing:
+    algorithm: "round_robin"
+
+  health_check:
+    enabled: true
+    interval_seconds: 10
+    timeout_seconds: 5
+    path: "/get"
+
+  rate_limit:
+    enabled: true
+    requests_per_second: 20
+    burst: 40
+
+  # Public demo backends for cloud deployment (Heroku / Render)
+  backends:
+    - url: "https://httpbin.org"
+      weight: 1
+      name: "httpbin"
+    - url: "https://postman-echo.com"
+      weight: 1
+      name: "postman-echo"
+    - url: "https://jsonplaceholder.typicode.com"
+      weight: 2
+      name: "jsonplaceholder"

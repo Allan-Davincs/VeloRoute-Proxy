@@ -1,0 +1,28 @@
+# Render.com blueprint — deploy backend + frontend from monorepo
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: veloroute-backend
+    runtime: go
+    rootDir: backend
+    buildCommand: go build -o bin/veloroute ./cmd/veloroute
+    startCommand: ./bin/veloroute --config config.heroku.yaml
+    healthCheckPath: /api/metrics
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: VELOROUTE_CONFIG
+        value: config.heroku.yaml
+
+  - type: web
+    name: veloroute-proxy-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
+        # Set in Render dashboard after backend is live, e.g.:
+        # https://veloroute-backend.onrender.com

@@ -9,6 +9,18 @@ VeloRoute sits between your users and your backend servers. It distributes traff
 
 ---
 
+## Live demo (Heroku)
+
+| | URL |
+|---|-----|
+| **Dashboard** | https://veloroute-proxy-frontend-a5705033a4ef.herokuapp.com |
+| **Backend API** | https://veloroute-backend-bd3434ba5cd4.herokuapp.com/api/metrics |
+| **Proxy** | https://veloroute-backend-bd3434ba5cd4.herokuapp.com/get |
+
+Deploy your own instance → see **[DEPLOYMENT.md](DEPLOYMENT.md)** (Heroku + Render step-by-step).
+
+---
+
 ## Screenshots
 
 ### Admin dashboard

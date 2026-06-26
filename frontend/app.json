@@ -1,0 +1,14 @@
+{
+  "name": "veloroute-proxy-frontend",
+  "description": "VeloRoute real-time monitoring dashboard",
+  "repository": "https://github.com/Allan-Davincs/VeloRoute-Proxy",
+  "buildpacks": [
+    { "url": "heroku/nodejs" }
+  ],
+  "env": {
+    "VITE_API_BASE_URL": {
+      "description": "VeloRoute backend admin API URL (set after backend deploy)",
+      "required": true
+    }
+  }
+}

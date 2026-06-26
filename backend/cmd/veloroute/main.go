@@ -21,10 +21,25 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "./config.yaml", "path to config file")
+	configPath := flag.String("config", defaultConfigPath(), "path to config file")
 	flag.Parse()
 
-	cfg, err := config.Load(*configPath)
+	if port := os.Getenv("PORT"); port != "" {
+		run(port, *configPath, true)
+		return
+	}
+	run("", *configPath, false)
+}
+
+func defaultConfigPath() string {
+	if p := os.Getenv("VELOROUTE_CONFIG"); p != "" {
+		return p
+	}
+	return "./config.yaml"
+}
+
+func run(cloudPort, configPath string, cloudMode bool) {
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
@@ -69,6 +84,11 @@ func main() {
 
 	adminServer := admin.NewServer(cfg, pool, metricsReg, accessLog, appLogger)
 	proxyHandler := proxy.NewHandler(pool, rl, metricsReg, accessLog)
+
+	if cloudMode {
+		runCloudServer(cloudPort, proxyHandler, adminServer, appLogger)
+		return
+	}
 
 	proxySrv := &http.Server{Addr: cfg.VeloRoute.ListenAddr, Handler: proxyHandler}
 	adminSrv := &http.Server{Addr: cfg.VeloRoute.AdminAddr, Handler: adminServer.Handler()}
